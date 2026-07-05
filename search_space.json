@@ -1,0 +1,5 @@
+{
+
+    "trans_lr": {"_type": "choice", "_value": [0.0005, 0.001, 0.0003]},
+    "optim": {"_type": "choice", "_value": ["Adam"]}
+}

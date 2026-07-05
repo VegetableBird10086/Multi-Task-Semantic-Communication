@@ -1,0 +1,1 @@
+python test.py --datasets hmdb51 --bs 32 --load_from checkpoint_video/epoch_3.pth --device_id 5

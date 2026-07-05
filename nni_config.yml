@@ -1,0 +1,16 @@
+trialConcurrency: 1
+maxExecDuration: 100h
+maxTrialNum: 200
+trainingServicePlatform: local
+searchSpacePath: search_space.json
+useAnnotation: false
+experimentWorkingDirectory: ./nni-experiments
+tuner:
+  builtinTunerName: TPE
+trial:
+  command:  CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python nni_main.py --datasets  mmhs --bs 32 --save_path checkpoint_twitter_sarcasm --epochs 3 --device_id 2
+  codeDir: .
+  gpuNum: 1
+localConfig:
+  useActiveGpu: true
+  maxTrialNumPerGpu: 7

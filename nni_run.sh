@@ -1,0 +1,1 @@
+nnictl create --config nni_config.yml --port 8080
