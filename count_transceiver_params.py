@@ -98,12 +98,12 @@ def main() -> None:
 
     print(f"{'组件':<24} {'总参数量':>14}")
     print("-" * 40)
-    print(f"{'semantic_encoder':<24} {encoder_total / 1_000_000:>11.3f} M")
-    print(f"{'channel_encoder':<24} {channel_encoder_total / 1_000_000:>11.3f} M")
-    print(f"{'channel_decoder':<24} {channel_decoder_total / 1_000_000:>11.3f} M")
-    print(f"{'semantic_decoder':<24} {decoder_total / 1_000_000:>11.3f} M")
+    print(f"{'semantic_encoder':<24} {encoder_total / 1_000_000:>11.2f} M")
+    print(f"{'channel_encoder':<24} {channel_encoder_total / 1_000_000:>11.2f} M")
+    print(f"{'channel_decoder':<24} {channel_decoder_total / 1_000_000:>11.2f} M")
+    print(f"{'semantic_decoder':<24} {decoder_total / 1_000_000:>11.2f} M")
     print("-" * 40)
-    print(f"{'Transceiver':<24} {total / 1_000_000:>11.3f} M")
+    print(f"{'Transceiver':<24} {total / 1_000_000:>11.2f} M")
 
 
 if __name__ == "__main__":
