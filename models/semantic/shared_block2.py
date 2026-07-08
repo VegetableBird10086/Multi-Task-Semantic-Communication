@@ -167,6 +167,7 @@ class VisualConfig(object):
 
 
 VISUAL_CONFIG = VisualConfig()
+FUSION_HIDDEN_LAYERS = 1
 
 
 class BertConfig(object):
@@ -771,6 +772,10 @@ class BertPreTrainedModel(nn.Module):
             serialization_dir = tempdir
         # Load config
         config_file = os.path.join(serialization_dir, CONFIG_NAME)
+        if not os.path.isfile(config_file):
+            # Current Hugging Face repositories use config.json, while the
+            # legacy BERT archive used bert_config.json.
+            config_file = os.path.join(serialization_dir, 'config.json')
         config = BertConfig.from_json_file(config_file)
         logger.info("Model config {}".format(config))
         # Instantiate model.
@@ -1033,7 +1038,7 @@ class BertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        config.num_hidden_layers = 4
+        config.num_hidden_layers = FUSION_HIDDEN_LAYERS
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(self,hidden_states,attention_mask=None):
@@ -1047,19 +1052,12 @@ class BertEncoder(nn.Module):
         return outputs 
 
 class VisualBertEmbeddings(nn.Module):
-    """Construct the embeddings from word, position and token_type embeddings.
-    """
+    """Combine encoded text features with projected visual region features."""
+
     def __init__(self, config):
         super(VisualBertEmbeddings, self).__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=0)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size, padding_idx=0)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size, padding_idx=0)
-    
         self.projection = nn.Linear(VISUAL_CONFIG.visual_feat_dim, config.hidden_size)
         self.token_type_embeddings_visual = nn.Embedding(config.type_vocab_size, config.hidden_size)
-        self.position_embeddings_visual = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        
-        
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file

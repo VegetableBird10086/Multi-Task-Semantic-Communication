@@ -1,181 +1,82 @@
-import datetime
+"""Distributed VQAv2 training entry point."""
+
 import os
+import time
 
-from functools import partial
-
-import numpy as np
 import torch
-import torch.backends.cudnn as cudnn
 import torch.distributed as dist
-import torch.nn as nn
-import torch.optim as optim
-from torch import nn
-from torch.utils.data import DataLoader
-import random 
-from optimizer import BertAdam
-
-seed = 42
-torch.manual_seed(seed)
-torch.cuda.manual_seed_all(seed)
-np.random.seed(seed)
-random.seed(seed)
-torch.backends.cudnn.deterministic = True
-import warnings
-warnings.filterwarnings("ignore")
-
-
-
-from helper import parse_args
-import os
-import torch.optim as optim
-from datasets import libri_padding
-import datasets
-from torch.utils.data import DataLoader
-from models.transceiver import Transceiver
+from torch.nn.parallel import DistributedDataParallel
+from torch.utils.data import DataLoader, DistributedSampler
 from tqdm import tqdm
-from train import train_step, train_step_one
-from eval import eval_step
-from config import task_mappings
 
-def get_optimizers(args, model):
-    optims = args.optims
-    lrs = args.lrs
-    tasks = args.datasets 
-    
-    optimizers = {}
-    for (lr, task, optim_name) in zip(lrs, tasks, optims):
-        try:
-            optimizer = getattr(optim, optim_name)(model.parameters(), lr=lr) 
-        except:
-            optimizer = BertAdam(model.parameters(), lr=lr, warmup=0.1, t_total=int(1944 * args.epochs))
-        optimizers[task] = optimizer
-        
-    return optimizers
-    
+from datasets import VQAv2
+from helper import parse_args
+from main import (
+    VQA_TASK,
+    build_optimizer,
+    format_time,
+    set_seed,
+)
+from models.transceiver import Transceiver
+from train import train_step
 
 
-def format_time(seconds):
-    minutes, seconds = divmod(seconds, 60)
-    hours, minutes = divmod(minutes, 60)
-    return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
-
-def build_multi_loaders(train_sets, args):
-    multi_loaders = []
-    total_len = 0
-    for i, train_set in enumerate(train_sets):
-        dataset_name = args.datasets[i] 
-        if dataset_name == 'libri_sb':
-            train_loader = DataLoader(train_set, batch_size=args.bs[i], shuffle=True, drop_last=True, num_workers=8, pin_memory=True, collate_fn=libri_padding)
-        elif dataset_name == 'flickr30':
-            train_loader = DataLoader(train_set, batch_size=args.bs[i], shuffle=True, drop_last=True, num_workers=8, pin_memory=True, collate_fn=flickr_collate)
-        else:
-            train_loader = DataLoader(train_set, batch_size=args.bs[i], shuffle=True, drop_last=True, num_workers=8, pin_memory=True)
-        total_len += len(train_loader)
-        multi_loaders.append(iter(train_loader))
-    return multi_loaders, total_len
-
-def get_batch_data(multi_loaders):
-    while True:
-        loader_nums = len(multi_loaders)
-        if loader_nums == 0:
-            flag = True 
-            data_batch = None
-            break
-        else:
-            random_idx = random.randint(0, loader_nums-1)
-            data_loader = multi_loaders[random_idx]
-            # data_batch = next(data_loader)
-            # flag = False
-            try:
-                data_batch = next(data_loader)
-                flag = False
-                break
-            except:
-                multi_loaders.pop(random_idx)
-    return flag, data_batch
-    
-
-if __name__ == '__main__':
+def main():
+    set_seed()
     args = parse_args()
-    print(args)
-    
-    ngpus_per_node  = torch.cuda.device_count()
 
     dist.init_process_group(backend="nccl")
-    local_rank  = int(os.environ["LOCAL_RANK"])
-    rank        = int(os.environ["RANK"])
-    device      = torch.device("cuda", local_rank)
-    if local_rank == 0:
-        print(f"[{os.getpid()}] (rank = {rank}, local_rank = {local_rank}) training...")
-        print("Gpu Device Count : ", ngpus_per_node)
+    local_rank = int(os.environ["LOCAL_RANK"])
+    rank = int(os.environ["RANK"])
+    device = torch.device("cuda", local_rank)
+    torch.cuda.set_device(device)
 
-    
-    
-    
-    train_sets, test_sets = [], []
+    train_set = VQAv2(["train", "nominival"])
+    sampler = DistributedSampler(train_set, shuffle=True)
+    train_loader = DataLoader(
+        train_set,
+        batch_size=args.bs[0],
+        sampler=sampler,
+        drop_last=True,
+        num_workers=args.nthreads,
+        pin_memory=True,
+    )
 
-    for dataset_name, bs in zip(args.datasets, args.bs):
-        train_sets.append(getattr(datasets, dataset_name + '_trainset'))
-        test_sets.append(getattr(datasets, dataset_name + '_testset'))
+    transceiver = Transceiver(args).to(device)
+    optimizer = build_optimizer(args, transceiver)
+    transceiver = DistributedDataParallel(
+        transceiver, device_ids=[local_rank], find_unused_parameters=False
+    )
 
+    if rank == 0:
+        os.makedirs(args.save_path, exist_ok=True)
+        print(args)
 
-    test_loaders = [DataLoader(test_set, batch_size=bs, shuffle=False, num_workers=4) for test_set, bs in zip(test_sets, args.bs)]
-    
-    
-    transceiver = Transceiver(args)
-    # transceiver_optim = optim.Adam(transceiver.parameters(), lr=args.trans_lr)
-    optimizers = get_optimizers(args, transceiver)
-    # optimizers = {'fastvqa': BertAdam(transceiver.parameters(),lr=1e-4, warmup=0.1, t_total=int(19753 * args.epochs))}
-    
-
-    transceiver = transceiver.cuda(local_rank)
-    transceiver = torch.nn.parallel.DistributedDataParallel(transceiver, device_ids=[local_rank], find_unused_parameters=True)
-    
-    # Training the model
     for epoch in range(args.epochs):
-        start_time = time.time()
-        train_loaders, total_len = build_multi_loaders(train_sets, args)
+        sampler.set_epoch(epoch)
         transceiver.train()
-        tqdm.write('Epoch %d training starts' % epoch)
-        iter_n = 0 
-        cur_loss = None
-        cur_batch = 0
-        while True:
-            flag, data = get_batch_data(train_loaders) 
-            if flag:
-                break
+        start_time = time.time()
+
+        for step, data in enumerate(train_loader):
             data = {key: value.to(device) for key, value in data.items()}
-            data['epoch'] = epoch + 1
-            task_id = int(data['task_id'][0, 0])
-            del data['task_id']
-            task_type = task_mappings[task_id]
-            data['task_type'] = task_type
-            loss, metric, metric_value = train_step(data, transceiver, optimizers[task_type], device)
-            # torch.cuda.empty_cache()
+            data.pop("task_id")
+            data["task_type"] = VQA_TASK
+            loss, metric, metric_value = train_step(data, transceiver, optimizer, device)
 
-            if iter_n % 10 == 0:
-                end_time = time.time()
+            if rank == 0 and step % 10 == 0:
+                elapsed = time.time() - start_time
+                eta = (len(train_loader) - step) / (step + 1) * elapsed
+                tqdm.write(
+                    f"Epoch {epoch}: [{step}/{len(train_loader)}], task:VQAv2, "
+                    f"loss:{loss}, {metric}:{metric_value}, "
+                    f"ela:{format_time(elapsed)}, eta:{format_time(eta)}"
+                )
 
-                ela = end_time - start_time 
-                eta = (total_len - iter_n) / (iter_n + 1) * ela
+        if rank == 0:
+            torch.save(transceiver.module, f"{args.save_path}/epoch_{epoch}.pth")
 
-                tqdm.write(f"Epoch {epoch}: [{iter_n}]/[{total_len}], task:{task_type}, loss: {loss}, {metric}: {metric_value}, ela: {format_time(ela)}, eta: {format_time(eta)}")
-            if iter_n % 200 == 0:
-                tqdm.write('Model is saved to "%s/epoch_%d.pth' % (args.save_path, epoch))
-                torch.save(transceiver, "%s/epoch_%d.pth" % (args.save_path, epoch))
-            iter_n += 1
-            
-        tqdm.write('Epoch %d training ends' % epoch)
-        tqdm.write('Model is saved to "%s/epoch_%d.pth' % (args.save_path, epoch))
-        torch.save(transceiver, "%s/epoch_%d.pth" % (args.save_path, epoch))
-            
+    dist.destroy_process_group()
 
-        
-        # if epoch % args.test_interval == 0 and data['task_type'] != 'libri':
-        #     tqdm.write('Test starts')
-        #     for test_loader in test_loaders:
-        #         transceiver.eval()
-        #         eval_step(transceiver, test_loader, device)
-        
-        
-        
+
+if __name__ == "__main__":
+    main()

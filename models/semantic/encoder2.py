@@ -142,7 +142,7 @@ class SemanticEncoder(nn.Module):
             encoder_outputs = self.text_proj(encoder_outputs[0])
             data['text'] = encoder_outputs
             
-        if task_type == 'fastvqa':
+        if task_type == 'VQAv2':
             # method 1
             # bs = data['image'].shape[0] 
             # features = []

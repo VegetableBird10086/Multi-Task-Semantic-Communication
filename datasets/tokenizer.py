@@ -1,5 +1,12 @@
+from pathlib import Path
+
 from transformers import AutoTokenizer
 import torch
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+BERT_TOKENIZER_DIR = PROJECT_ROOT / "pretrained" / "bert-base-uncased"
+
 
 class BertTokenizer():
     def __init__(self, max_tokens=128, max_seq_length=128):
@@ -9,8 +16,9 @@ class BertTokenizer():
         self.max_seq_length = max_seq_length
 
         self.tokenizer = AutoTokenizer.from_pretrained(
-            'bert-base-uncased',
-            do_lowercase=True
+            str(BERT_TOKENIZER_DIR),
+            do_lower_case=True,
+            local_files_only=True,
         )
         self.max_tokens = max_tokens
     def tokenize(self, sentence):

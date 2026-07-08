@@ -14,7 +14,7 @@ class ChannelDecoder(nn.Module):
     def forward(self, data):
         task_type = data['task_type']
         
-        if task_type in ['fastvqa', 'mmhs', 'mmdb']:
+        if task_type in ['VQAv2', 'mmhs', 'mmdb']:
             for data_type in ['memories']:
                 if data_type in data.keys():
                     x = data[data_type]
@@ -49,7 +49,7 @@ class ChannelDecoder(nn.Module):
 #     def forward(self, data):
 #         task_type = data['task_type']
         
-#         if task_type in ['fastvqa']:
+#         if task_type in ['VQAv2']:
 #             for data_type in ['memories']:
 #                 if data_type in data.keys():
 #                     x = data[data_type]
@@ -76,7 +76,7 @@ class ChannelDecoder(nn.Module):
 #     def forward(self, data):
 #         task_type = data['task_type']
         
-#         if task_type in ['fastvqa']:
+#         if task_type in ['VQAv2']:
 #             for data_type in ['memories']:
 #                 if data_type in data.keys():
 #                     x = data[data_type]
@@ -106,7 +106,7 @@ class ChannelDecoder(nn.Module):
 #     def forward(self, data):
 #         task_type = data['task_type']
         
-#         if task_type in ['fastvqa']:
+#         if task_type in ['VQAv2']:
 #             for data_type in ['memories']:
 #                 if data_type in data.keys():
 #                     x = data[data_type]
@@ -135,7 +135,7 @@ class ChannelDecoder(nn.Module):
 #     def forward(self, data):
 #         task_type = data['task_type']
         
-#         if task_type in ['fastvqa']:
+#         if task_type in ['VQAv2']:
 #             for data_type in ['memories']:
 #                 if data_type in data.keys():
 #                     x = data[data_type]
@@ -164,7 +164,7 @@ class ChannelDecoder(nn.Module):
 #     def forward(self, data):
 #         task_type = data['task_type']
         
-#         if task_type in ['fastvqa']:
+#         if task_type in ['VQAv2']:
 #             for data_type in ['memories']:
 #                 if data_type in data.keys():
 #                     x = data[data_type]
@@ -194,7 +194,7 @@ class ChannelDecoder(nn.Module):
 #     def forward(self, data):
 #         task_type = data['task_type']
         
-#         if task_type in ['fastvqa']:
+#         if task_type in ['VQAv2']:
 #             for data_type in ['memories']:
 #                 if data_type in data.keys():
 #                     x = data[data_type]
